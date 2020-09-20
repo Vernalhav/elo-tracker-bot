@@ -51,6 +51,10 @@ async def on_message(message):
         embed = discord.Embed(title=summoner_name, color=league_colors[league_info['tier']])
         embed.add_field(name='Elo', value=f'{league_info["tier"].title()} {league_info["rank"]}')
         embed.add_field(name='LP', value=f'{league_info["lp"]}')
+        if 'promos' in league_info:
+            promos = league_info['promos']
+            embed.add_field(name=f'MD{promos["best_of"]}', value=f'{promos["wins"]}W {promos["losses"]}L')
+   
         embed.add_field(name='Win Rate', value=f'{league_info["win_ratio"]}%', inline=False)
 
         await message.channel.send(embed=embed)
@@ -80,12 +84,20 @@ def get_league_info(summoner_name='tsctsctsctsc', server='NA', queue='RANKED_SOL
             if queue_type_info['queueType'] == queue:
                 league_info = league_request.json()[i]
         
-        return {
+        player_data = {
             'tier': league_info['tier'],
             'rank': league_info['rank'],
             'lp': league_info['leaguePoints'],
             'win_ratio': int(100*league_info['wins']/(league_info['wins'] + league_info['losses']))
         }
+        if 'miniSeries' in league_info:
+            player_data['promos'] = {
+                'best_of': len(league_info['miniSeries']['progress']),
+                'wins': league_info['miniSeries']['wins'],
+                'losses': league_info['miniSeries']['losses']
+            }
+        return player_data
+
     except:
         print('Error')
         return dict()
