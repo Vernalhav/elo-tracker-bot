@@ -57,7 +57,10 @@ async def on_message(message):
    
         embed.add_field(name='Win Rate', value=f'{league_info["win_ratio"]}%', inline=False)
 
-        await message.channel.send(embed=embed)
+        sent_message = await message.channel.send(embed=embed)
+        if league_info['streak']:
+            await sent_message.add_reaction('🐦')
+            await sent_message.add_reaction('🔥')
 
 
 def get_league_info(summoner_name='tsctsctsctsc', server='NA', queue='RANKED_SOLO_5x5'):
@@ -88,7 +91,8 @@ def get_league_info(summoner_name='tsctsctsctsc', server='NA', queue='RANKED_SOL
             'tier': league_info['tier'],
             'rank': league_info['rank'],
             'lp': league_info['leaguePoints'],
-            'win_ratio': int(100*league_info['wins']/(league_info['wins'] + league_info['losses']))
+            'win_ratio': int(100*league_info['wins']/(league_info['wins'] + league_info['losses'])),
+            'streak': league_info['hotStreak']
         }
         if 'miniSeries' in league_info:
             player_data['promos'] = {
