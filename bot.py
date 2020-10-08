@@ -1,9 +1,6 @@
 import discord
-from config import DISCORD_TOKEN, RIOT_KEY
-
-import requests
-import json
-
+import league
+from config import DISCORD_TOKEN
 
 client = discord.Client()
 PREFIX = '!'
@@ -39,7 +36,7 @@ async def on_message(message):
             'CHALLENGER': 0xebede4
         }
 
-        league_info = get_league_info(summoner_name, server);
+        league_info = league.get_league_info(summoner_name, server);
 
         if league_info == None:
             await message.channel.send(f'Deu algum erro na busca do jogador {summoner_name} no server {server}')
@@ -61,50 +58,6 @@ async def on_message(message):
         if league_info['streak']:
             await sent_message.add_reaction('🐦')
             await sent_message.add_reaction('🔥')
-
-
-def get_league_info(summoner_name='tsctsctsctsc', server='NA', queue='RANKED_SOLO_5x5'):
-
-    headers = {
-        "User-Agent": "EloTracker/0.1 personal discord bot",
-        'X-Riot-Token': RIOT_KEY
-    }
-    
-    server_prefix = ['br1', 'na1'][server == 'NA']
-
-    client_req_url = f'https://{server_prefix}.api.riotgames.com/lol/summoner/v4/summoners/by-name/{summoner_name}'
-    client_id_request = requests.get(client_req_url, headers=headers)
-
-    if client_id_request.status_code != 200: return None
-    client_id = client_id_request.json()['id']
-
-    league_req_url = f'https://{server_prefix}.api.riotgames.com/lol/league/v4/entries/by-summoner/{client_id}'
-    league_request = requests.get(league_req_url, headers=headers)
-
-    try:
-        league_info = None
-        for i, queue_type_info in enumerate(league_request.json()):
-            if queue_type_info['queueType'] == queue:
-                league_info = league_request.json()[i]
-        
-        player_data = {
-            'tier': league_info['tier'],
-            'rank': league_info['rank'],
-            'lp': league_info['leaguePoints'],
-            'win_ratio': int(100*league_info['wins']/(league_info['wins'] + league_info['losses'])),
-            'streak': league_info['hotStreak']
-        }
-        if 'miniSeries' in league_info:
-            player_data['promos'] = {
-                'best_of': len(league_info['miniSeries']['progress']),
-                'wins': league_info['miniSeries']['wins'],
-                'losses': league_info['miniSeries']['losses']
-            }
-        return player_data
-
-    except:
-        print('Error')
-        return dict()
 
 
 def main():

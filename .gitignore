@@ -1,3 +1,6 @@
 __pycache__
 env
 config.py
+sample.json
+champion.json
+champion_ids.json
