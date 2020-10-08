@@ -8,23 +8,40 @@ import os
 CHAMP_FILE = 'champion.json'
 CHAMP_INDEX = 'champion_ids.json'
 
-current_patch = get_latest_patch()
+queue_ids = {
+    'RANKED_SOLO_5x5': 420,
+    'RANKED_FLEX_5x5': 440
+}
+
+server_prefixes = {
+    'NA': 'na1',
+    'BR': 'br1'
+}
+
+headers = {
+    "User-Agent": "EloTracker/0.1 personal discord bot",
+    'X-Riot-Token': RIOT_KEY
+}
+
+summoner_ids = {}
 
 
 def get_league_info(summoner_name='tsctsctsctsc', server='NA', queue='RANKED_SOLO_5x5'):
 
-    headers = {
-        "User-Agent": "EloTracker/0.1 personal discord bot",
-        'X-Riot-Token': RIOT_KEY
-    }
-    
-    server_prefix = ['br1', 'na1'][server == 'NA']
+    server_prefix = server_prefixes[server]
 
-    client_req_url = f'https://{server_prefix}.api.riotgames.com/lol/summoner/v4/summoners/by-name/{summoner_name}'
-    client_id_request = requests.get(client_req_url, headers=headers)
+    if summoner_name not in summoner_ids:
+        client_req_url = f'https://{server_prefix}.api.riotgames.com/lol/summoner/v4/summoners/by-name/{summoner_name}'
+        client_id_request = requests.get(client_req_url, headers=headers)
 
-    if client_id_request.status_code != 200: return None
-    client_id = client_id_request.json()['id']
+        if client_id_request.status_code != 200:
+            return None
+        
+        client_id = client_id_request.json()['id']
+        account_id = client_id_request.json()['accountId']
+        summoner_ids[summoner_name] = {'clientId': client_id, 'accountId': account_id}
+
+    client_id = summoner_ids[summoner_name]['clientId']
 
     league_req_url = f'https://{server_prefix}.api.riotgames.com/lol/league/v4/entries/by-summoner/{client_id}'
     league_request = requests.get(league_req_url, headers=headers)
@@ -109,14 +126,83 @@ def check_new_patch():
 
 def get_champ_icon_url(champion):
     
+    global current_patch
     retries = 0
     while current_patch == None and retries < 3:
-        global current_patch = get_latest_patch()
+        current_patch = get_latest_patch()
         retries += 1
 
     return f'http://ddragon.leagueoflegends.com/cdn/{current_patch}/img/champion/{champion}.png'
 
 
+def get_champion_name(champion_id):
+    with open(CHAMP_INDEX) as f:
+        return json.load(f)[str(champion_id)]
+    return None
+
+
+def get_last_match(summoner_name, server='NA', queue='RANKED_SOLO_5x5'):
+
+    server_prefix = server_prefixes[server]
+
+    if summoner_name not in summoner_ids:
+        client_req_url = f'https://{server_prefix}.api.riotgames.com/lol/summoner/v4/summoners/by-name/{summoner_name}'
+        client_id_request = requests.get(client_req_url, headers=headers)
+
+        if client_id_request.status_code != 200:
+            raise Exception()
+        
+        client_id = client_id_request.json()['id']
+        account_id = client_id_request.json()['accountId']
+        summoner_ids[summoner_name] = {'clientId': client_id, 'accountId': account_id}
+
+    account_id = summoner_ids[summoner_name]['accountId']
+    
+    payload = {'queue': queue_ids[queue], 'endIndex': 1, 'beginIndex': 0}
+    last_match_url = f'https://{server_prefix}.api.riotgames.com/lol/match/v4/matchlists/by-account/{account_id}'
+    last_match_req = requests.get(last_match_url, params=payload, headers=headers)
+
+    if last_match_req.status_code != 200:
+        raise Exception(last_match_req.status_code)
+
+    last_match_id = last_match_req.json()['matches'][0]['gameId']
+    
+    match_data_url = f'https://{server_prefix}.api.riotgames.com/lol/match/v4/matches/{last_match_id}'
+    match_data_req = requests.get(match_data_url, headers=headers)
+
+    if match_data_req.status_code != 200:
+        raise Exception()
+
+    match_data = match_data_req.json()
+
+    summoner_index = -1
+    for summoner in match_data['participantIdentities']:
+        if summoner['player']['summonerName'].lower() == summoner_name:
+            summoner_index = summoner['participantId']
+            break
+
+    summoner_stats = None
+    for participant in match_data['participants']:
+        if participant['participantId'] == summoner_index:
+            summoner_stats = participant
+            break
+
+    KDA = f'{summoner_stats["stats"]["kills"]}/{summoner_stats["stats"]["deaths"]}/{summoner_stats["stats"]["assists"]}'
+    win = summoner_stats['stats']['win']
+    champion = get_champion_name(summoner_stats['championId'])
+    champ_icon = get_champ_icon_url(champion)
+    elapsed_time = str(match_data['gameDuration']//60) + ' min'
+
+    return {
+        'KDA': KDA,
+        'win': win,
+        'elapsedTime': elapsed_time,
+        'champion': champion,
+        'championIconURL': champ_icon
+    }
+
+
+current_patch = get_latest_patch()
 
 if __name__ == '__main__':
-    check_new_patch()
+    print(get_last_match('tsctsctsctsc'))
