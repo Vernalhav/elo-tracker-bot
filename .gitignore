@@ -4,3 +4,4 @@ config.py
 sample.json
 champion.json
 champion_ids.json
+bot_log.log

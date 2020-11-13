@@ -5,6 +5,12 @@ from config import DISCORD_TOKEN
 client = discord.Client()
 PREFIX = '!'
 
+queues = ['RANKED_SOLO_5x5', 'RANKED_FLEX_SR']
+queue_names = {
+    'RANKED_SOLO_5x5': 'Solo',
+    'RANKED_FLEX_SR': 'Flex'
+}
+
 @client.event
 async def on_ready():
     print(f'We have logged in as {client.user}')
@@ -19,15 +25,15 @@ async def on_message(message):
         summoner_name = 'tsctsctsctsc'
         server = 'NA'
 
-        args = message.content.split(maxsplit=1)
+        args = message.content.replace('-f', '').split(maxsplit=1)
         if len(args) != 1:
-            summoner_name = args[1]
+            summoner_name = args[1].strip()
             server = 'BR'
+        
+        await pdl_command(message, summoner_name, server, queue=queues['-f' in message.content])
 
-        await pdl_command(message, summoner_name, server)
 
-
-async def pdl_command(message, summoner_name, server):
+async def pdl_command(message, summoner_name, server, queue='RANKED_SOLO_5x5'):
     league_colors = {
         'IRON': 0x636363,
         'BRONZE': 0xb8840d,
@@ -40,7 +46,7 @@ async def pdl_command(message, summoner_name, server):
         'CHALLENGER': 0xebede4
     }
 
-    league_info = league.get_league_info(summoner_name, server)
+    league_info = league.get_league_info(summoner_name, server, queue=queue)
 
     if league_info == None:
         await message.channel.send(f'Deu algum erro na busca do jogador {summoner_name} no server {server}')
@@ -50,10 +56,10 @@ async def pdl_command(message, summoner_name, server):
         await message.channel.send(f'O jogador {summoner_name} não tem dados ranqueados disponíveis')
         return
 
-    last_match = league.get_last_match(summoner_name, server)
+    last_match = league.get_last_match(summoner_name, server, queue=queue)
 
     embed = discord.Embed(title=summoner_name, color=league_colors[league_info['tier']])
-    embed.add_field(name='Elo', value=f'{league_info["tier"].title()} {league_info["rank"]}')
+    embed.add_field(name=f'Elo ({queue_names[queue]})', value=f'{league_info["tier"].title()} {league_info["rank"]}')
     embed.add_field(name='LP', value=f'{league_info["lp"]}')
     if 'promos' in league_info:
         promos = league_info['promos']

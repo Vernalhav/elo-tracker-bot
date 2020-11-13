@@ -1,16 +1,18 @@
 from config import RIOT_KEY
 
 import requests
+import logging
 import json
+import sys
 import os
 
 
-CHAMP_FILE = 'champion.json'
-CHAMP_INDEX = 'champion_ids.json'
+CHAMP_FILE = os.path.join(sys.path[0], 'champion.json')
+CHAMP_INDEX = os.path.join(sys.path[0], 'champion_ids.json')
 
 queue_ids = {
     'RANKED_SOLO_5x5': 420,
-    'RANKED_FLEX_5x5': 440
+    'RANKED_FLEX_SR': 440
 }
 
 server_prefixes = {
@@ -48,9 +50,9 @@ def get_league_info(summoner_name='tsctsctsctsc', server='NA', queue='RANKED_SOL
 
     try:
         league_info = None
-        for i, queue_type_info in enumerate(league_request.json()):
+        for queue_type_info in league_request.json():
             if queue_type_info['queueType'] == queue:
-                league_info = league_request.json()[i]
+                league_info = queue_type_info
         
         player_data = {
             'tier': league_info['tier'],
@@ -65,6 +67,7 @@ def get_league_info(summoner_name='tsctsctsctsc', server='NA', queue='RANKED_SOL
                 'wins': league_info['miniSeries']['wins'],
                 'losses': league_info['miniSeries']['losses']
             }
+
         return player_data
 
     except:
@@ -87,7 +90,7 @@ def create_champion_index():
 def get_champion_data(patch):
     req_url = f'http://ddragon.leagueoflegends.com/cdn/{patch}/data/en_US/champion.json'
     champ_data_req = requests.get(req_url)
-    
+
     if champ_data_req.status_code != 200:
         return 0
 
@@ -108,23 +111,23 @@ def get_latest_patch():
 def check_new_patch():
 
     if not os.path.exists(CHAMP_FILE):
-        print(f'Local files not found and latest patch is {current_patch}. Updating files...')
+        logger.info(f'Local files not found and latest patch is {current_patch}. Updating files...')
         get_champion_data(current_patch)
         create_champion_index()
-        print(f'Done updating {CHAMP_FILE} and {CHAMP_INDEX}')
+        logger.info(f'Done updating {CHAMP_FILE} and {CHAMP_INDEX}')
 
 
     with open(CHAMP_FILE) as f:
         champions_patch = json.load(f)['version']
         
         if champions_patch != current_patch:
-            print(f'Local files are from patch {champions_patch} and latest patch is {current_patch}. Updating files...')
+            logger.info(f'Local files are from patch {champions_patch} and latest patch is {current_patch}. Updating files...')
             get_champion_data(current_patch)
             create_champion_index()
-            print(f'Done updating {CHAMP_FILE} and {CHAMP_INDEX}')
+            logger.info(f'Done updating champion.json and champion_ids.json')
 
 
-def get_champ_icon_url(champion):
+def get_champ_icon_url(champion, skin=0):
     
     global current_patch
     retries = 0
@@ -133,6 +136,17 @@ def get_champ_icon_url(champion):
         retries += 1
 
     return f'http://ddragon.leagueoflegends.com/cdn/{current_patch}/img/champion/{champion}.png'
+
+
+def get_item_icon_url(item):
+
+    global current_patch
+    retries = 0
+    while current_patch == None and retries < 3:
+        current_patch = get_latest_patch()
+        retries += 1
+
+    return f'http://ddragon.leagueoflegends.com/cdn/{current_patch}/img/item/{item}.png'
 
 
 def get_champion_name(champion_id):
@@ -157,7 +171,7 @@ def get_last_match(summoner_name, server='NA', queue='RANKED_SOLO_5x5'):
         summoner_ids[summoner_name] = {'clientId': client_id, 'accountId': account_id}
 
     account_id = summoner_ids[summoner_name]['accountId']
-    
+
     payload = {'queue': queue_ids[queue], 'endIndex': 1, 'beginIndex': 0}
     last_match_url = f'https://{server_prefix}.api.riotgames.com/lol/match/v4/matchlists/by-account/{account_id}'
     last_match_req = requests.get(last_match_url, params=payload, headers=headers)
@@ -179,7 +193,7 @@ def get_last_match(summoner_name, server='NA', queue='RANKED_SOLO_5x5'):
     for summoner in match_data['participantIdentities']:
         if summoner['player']['summonerName'].lower() == summoner_name:
             summoner_index = summoner['participantId']
-            break
+            break    
 
     summoner_stats = None
     for participant in match_data['participants']:
@@ -192,17 +206,27 @@ def get_last_match(summoner_name, server='NA', queue='RANKED_SOLO_5x5'):
     champion = get_champion_name(summoner_stats['championId'])
     champ_icon = get_champ_icon_url(champion)
     elapsed_time = str(match_data['gameDuration']//60) + ' min'
+    
+    item_ids = [summoner_stats['stats'][f'item{i}'] for i in range(6)]
+    item_urls = [ get_item_icon_url(item_id) for item_id in item_ids[::-1] ]
 
+    print(champ_icon)
     return {
         'KDA': KDA,
         'win': win,
         'elapsedTime': elapsed_time,
         'champion': champion,
-        'championIconURL': champ_icon
+        'championIconURL': champ_icon,
+        'items': item_urls
     }
 
 
-current_patch = get_latest_patch()
+logfile = 'bot_log.log'
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+fp = logging.FileHandler(filename=logfile, mode='w')
+logger.addHandler(fp)
 
-if __name__ == '__main__':
-    print(get_last_match('tsctsctsctsc'))
+current_patch = get_latest_patch()
+check_new_patch()
+logger.info(f'league.py started. Latest patch is {current_patch}')
